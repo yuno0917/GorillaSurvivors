@@ -416,5 +416,69 @@
     setMobileControlsEnabled(false); show(ui.menu); requestAnimationFrame(loop);
   })();
   </script>
+  <div id="rotate" class="overlay" style="z-index:50;">
+    <div class="panel" style="text-align:center">
+      <div class="title">📱 画面を横向きにしてください</div>
+      <div class="desc">スマホでは<strong>横画面を強制</strong>します。端末の回転ロックを解除して、横にしてください。</div>
+    </div>
+  </div>
+
+  <style>
+    /* 縦向きのときは回転要求オーバーレイを表示（JSでも制御するがCSSでも保険） */
+    @media screen and (orientation: portrait) { #rotate{ display:flex !important; } }
+  </style>
+
+  <script>
+  (function(){
+    // 既存即時関数の外からUI参照を取れないため、少し待ってからフック
+    function setupOrientationGuard(){
+      var rotateEl = document.getElementById('rotate');
+      // UI参照を拾う（既存のIIFE内 ui を触れないので DOM ベースで制御）
+      var mobileWrap = document.getElementById('mobileWrap');
+      var menu = document.getElementById('menu');
+      var over = document.getElementById('gameover');
+      var pause = document.getElementById('pause');
+      var levelup = document.getElementById('levelup');
+      var chest = document.getElementById('chest');
+
+      function isPortrait(){ return window.matchMedia && window.matchMedia('(orientation: portrait)').matches; }
+
+      function pauseIfPortrait(){
+        if(isPortrait()){
+          // オーバーレイ表示
+          rotateEl.style.display='flex';
+          // モバイルスティックを隠す
+          mobileWrap && (mobileWrap.style.display='none');
+          // 可能ならサウンド停止
+          try{ window.SND && SND.suspend && SND.suspend(); }catch(_){ }
+          // 既存ループは state==='rotate' を見ているので、グローバルに書けない場合はCSSでブロック
+        }else{
+          rotateEl.style.display='none';
+          // メニュー等でなければスティックを戻す
+          var inMenu = (menu && menu.style.display==='flex') || (pause && pause.style.display==='flex') || (over && over.style.display==='flex') || (levelup && levelup.style.display==='flex') || (chest && chest.style.display==='flex');
+          if(!inMenu && mobileWrap){ mobileWrap.style.display='block'; }
+          try{ window.SND && SND.resume && SND.resume(); }catch(_){ }
+        }
+      }
+
+      window.addEventListener('resize', pauseIfPortrait);
+      window.addEventListener('orientationchange', pauseIfPortrait);
+      pauseIfPortrait();
+
+      // スタートボタン押下時に API でロック試行（対応ブラウザのみ）
+      var startBtn = document.getElementById('startBtn');
+      if(startBtn){ startBtn.addEventListener('click', function(){
+        if(screen.orientation && screen.orientation.lock){
+          screen.orientation.lock('landscape').catch(function(){});
+        }
+        // 押下直後にも念のためチェック
+        setTimeout(pauseIfPortrait, 50);
+      }); }
+    }
+    // DOM 構築後に実行
+    if(document.readyState==='complete' || document.readyState==='interactive') setupOrientationGuard();
+    else document.addEventListener('DOMContentLoaded', setupOrientationGuard);
+  })();
+  </script>
 </body>
 </html>
