@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Astro Survivors — ジャングル版（音付き・ゴリラvsサイ・EASY＋新敵＋範囲攻撃）</title>
+  <title>Astro Survivors — ジャングル版（AoE＋新敵）</title>
   <style>
     :root{ --bg:#0a120d; --fg:#e2e8f0; --muted:#94a3b8; --acc:#64ffda; --rare:#a78bfa; --legend:#f59e0b; }
     *{box-sizing:border-box}
     html,body{margin:0;height:100%;background:#0a120d;color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Meiryo",sans-serif}
     canvas{display:block;width:100vw;height:100vh;touch-action:none;background:#0a120d}
-    #ui{position:fixed;inset:0;pointer-events:none}
+    #ui{position:fixed;inset:0;pointer-events:none;z-index:20}
     #hud{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:12px;justify-content:space-between;align-items:center;font-weight:600;text-shadow:0 1px 0 #000;}
     #hud .pill{background:rgba(12,20,15,.55);border:1px solid rgba(148,163,184,.3);padding:8px 12px;border-radius:999px}
     #left{display:flex;gap:12px}
@@ -27,10 +27,13 @@
     .card:hover{filter:brightness(1.06)}
     .card .name{font-weight:800}
     .rar-rare{border-color:var(--rare)} .rar-legend{border-color:var(--legend)}
-    #mobileWrap{position:fixed;inset:0;pointer-events:none}
+
+    /* モバイル操作（プニコン） */
+    #mobileWrap{position:fixed;inset:0;pointer-events:none;z-index:10}
     #stick{position:absolute;left:18px;bottom:18px;width:170px;height:170px;border-radius:999px;background:rgba(148,163,184,.06);border:1px dashed rgba(148,163,184,.25);pointer-events:auto;touch-action:none}
     #nub{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:86px;height:86px;border-radius:999px;background:rgba(148,163,184,.12);border:1px solid rgba(148,163,184,.35);box-shadow:inset 0 0 16px rgba(0,0,0,.4)}
     @media (min-width: 900px){#mobileWrap{display:none}}
+
     #err{position:fixed;left:0;right:0;bottom:0;background:#7f1d1d;color:#fff;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;padding:8px 12px;display:none;z-index:99999;white-space:pre-wrap}
     #toggles{position:absolute;right:12px;bottom:12px;display:flex;gap:8px;pointer-events:auto}
   </style>
@@ -50,8 +53,8 @@
 
     <div id="menu" class="overlay">
       <div class="panel">
-        <div class="title">🌴 <span class="accent">Astro Survivors</span> — ジャングル版（やさしめ＋新敵＋範囲攻撃）</div>
-        <div class="desc">宝箱/レベルアップ時は<strong>時間＆音が停止</strong>。新敵：<strong>サル</strong>（ジグザグ）、<strong>コウモリ</strong>（旋回）。<br>新要素：<strong>ゴリラ・スラム</strong>（一定間隔で周囲に範囲攻撃）。操作：WASD/矢印、Pで一時停止。</div>
+        <div class="title">🌴 <span class="accent">Astro Survivors</span> — ジャングル版</div>
+        <div class="desc">宝箱/レベルアップ時は<strong>時間＆音が停止</strong>。新敵：サル（ジグザグ）、コウモリ（旋回）。<br>新要素：<strong>ゴリラ・スラム</strong>（定期的な範囲攻撃）。操作：WASD/矢印、Pで一時停止。</div>
         <div class="btns"><button id="startBtn">ゲームスタート</button></div>
       </div>
     </div>
@@ -113,13 +116,17 @@
 
     // ===== 入力 =====
     var keys={}; window.addEventListener('keydown',function(ev){var k=ev.key.toLowerCase(); if(['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d','p'].indexOf(k)>=0) ev.preventDefault(); keys[k]=true; if(k==='p') togglePause();}); window.addEventListener('keyup',function(ev){delete keys[ev.key.toLowerCase()]});
-    var stick={cx:0,cy:0,dx:0,dy:0,active:false,maxR:60}; var mobile={stick:document.getElementById('stick'),nub:document.getElementById('nub')};
+    var stick={cx:0,cy:0,dx:0,dy:0,active:false,maxR:60}; var mobile={wrap:document.getElementById('mobileWrap'),stick:document.getElementById('stick'),nub:document.getElementById('nub')};
     function stickReset(){ mobile.nub.style.left='50%'; mobile.nub.style.top='50%'; stick.dx=stick.dy=0; stick.active=false; }
     mobile.stick.addEventListener('pointerdown',function(e){stick.active=true; var r=mobile.stick.getBoundingClientRect(); stick.cx=r.left+r.width/2; stick.cy=r.top+r.height/2; mobile.stick.setPointerCapture(e.pointerId)});
     mobile.stick.addEventListener('pointermove',function(e){ if(!stick.active) return; var x=e.clientX-stick.cx,y=e.clientY-stick.cy; var d=Math.hypot(x,y),cl=Math.min(d,stick.maxR),a=Math.atan2(y,x); var nx=Math.cos(a)*cl, ny=Math.sin(a)*cl; mobile.nub.style.left=(50+nx/(mobile.stick.clientWidth/2)*50)+'%'; mobile.nub.style.top=(50+ny/(mobile.stick.clientHeight/2)*50)+'%'; stick.dx=nx/stick.maxR; stick.dy=ny/stick.maxR;});
-    mobile.stick.addEventListener('pointerup',stickReset); mobile.stick.addEventListener('pointercancel',stickReset);
+    function onUp(){stickReset(); try{ mobile.stick.releasePointerCapture && mobile.stick.releasePointerCapture(); }catch(_){} }
+    mobile.stick.addEventListener('pointerup',onUp); mobile.stick.addEventListener('pointercancel',onUp);
     function ix(){ return ((keys['arrowright']||keys['d'])?1:0) - ((keys['arrowleft']||keys['a'])?1:0) || stick.dx; }
     function iy(){ return ((keys['arrowdown']||keys['s'])?1:0) - ((keys['arrowup']||keys['w'])?1:0) || stick.dy; }
+
+    // モバイルUIの有効/無効（★メニュー中は無効：ボタンが押せない問題対策）
+    function setMobileControlsEnabled(on){ if(on){ mobile.wrap.style.display='block'; } else { mobile.wrap.style.display='none'; stickReset(); } }
 
     // ===== サウンド（停止/再開対応） =====
     var SND=(function(){
@@ -148,7 +155,7 @@
     var game={state:'menu', t:0, kills:0};
     var player = {x:0,y:0,r:18, speed: 215, hp:8, maxHp:8, armor:0, damage:12, cdMul:1, projSpeed:560, projCount:1, magnet:200,
                   boltLv:1, auraLv:0, orbitLv:0, evolved:false, exp:0, level:1, expNext:12, iframes:0,
-                  blastLv:1}; // ★ 範囲攻撃：初期Lv1
+                  blastLv:1};
     var cam={x:0,y:0};
     var enemies=[], bullets=[], gems=[], items=[], orbits=[], chests=[], fx=[];
 
@@ -211,7 +218,7 @@
     function jungleTile(c,g, c1, c2, alpha, near){ if(c1!=='transparent'){ var grd=g.createLinearGradient(0,0,c.width,0); grd.addColorStop(0,c1); grd.addColorStop(1,c2); g.fillStyle=grd; g.fillRect(0,0,c.width,c.height);} g.globalAlpha=alpha; for(var i=0;i<90;i++){ var x=Math.random()*c.width, y=Math.random()*c.height; var w=near? (30+Math.random()*60):(16+Math.random()*34); var h=w*(0.4+Math.random()*0.3); g.fillStyle = near? ['#1e3a24','#1b3521','#21422a'][Math.random()*3|0] : ['#112416','#0f1f13','#0c1b10'][Math.random()*3|0]; g.beginPath(); g.ellipse(x,y,w/2,h/2, Math.random()*Math.PI, 0, Math.PI*2); g.fill(); if(near && Math.random()<0.3){ g.strokeStyle='rgba(200,255,200,.15)'; g.lineWidth=1; g.beginPath(); g.moveTo(x-w*0.2,y); g.quadraticCurveTo(x,y-h*0.4, x+w*0.2,y); g.stroke(); } } g.globalAlpha = near? 0.4:0.2; g.strokeStyle= near? '#1f4d2a':'#12361c'; g.lineWidth = near? 4:2; for(var k=0;k<6;k++){ var sx=Math.random()*c.width, sy=-20; g.beginPath(); g.moveTo(sx,sy); for(var t=0;t<6;t++){ var nx=sx + (Math.random()*120-60); var ny=(t+1)*(c.height/6) + Math.random()*30; g.quadraticCurveTo((sx+nx)/2, sy+Math.random()*40, nx, ny); sx=nx; sy=ny; } g.stroke(); }
       g.globalAlpha=1; }
 
-    // ===== アップグレード =====
+    // ===== アップグレード（※「被ダメ-1」カードは削除） =====
     var rarity=[{k:'common', w:65, cls:''},{k:'rare', w:28, cls:'rar-rare'},{k:'legend', w:7, cls:'rar-legend'}];
     function pickRarity(){ var s=0; for(var i=0;i<rarity.length;i++) s+=rarity[i].w; var r=Math.random()*s,a=0; for(var i=0;i<rarity.length;i++){ a+=rarity[i].w; if(r<a) return rarity[i]; } return rarity[0]; }
     var ups=[
@@ -223,7 +230,6 @@
       {id:'mag', name:'バナナの香り', desc:'吸引範囲+40%', apply:function(){ player.magnet*=1.4; }},
       {id:'aura', name:'威圧の咆哮', desc:'近接オーラLv+1（範囲/毎秒ダメUP）', apply:function(){ player.auraLv=Math.min(6,(player.auraLv||0)+1);} },
       {id:'orbit', name:'舞う木の実', desc:'回転実Lv+1（枚数/範囲UP）', apply:function(){ player.orbitLv=Math.min(6,(player.orbitLv||0)+1); spawnOrbitIfNeeded(); }},
-      {id:'armor', name:'硬い毛皮', desc:'被ダメ-1（下限0）', apply:function(){ player.armor=Math.min(5, player.armor+1);} },
       {id:'blast', name:'ゴリラ・スラム', desc:'一定間隔で周囲に範囲攻撃（威力/範囲↑・CD短縮）', apply:function(){ player.blastLv=Math.min(6,(player.blastLv||0)+1);} }
     ];
     function upgradeCards(n){ var pool=ups.slice(0), cards=[]; for(var i=0;i<n && pool.length;i++){ var idx=Math.random()*pool.length|0; var u=pool.splice(idx,1)[0]; var rar=pickRarity(); cards.push({u:u, rar:rar}); } return cards; }
@@ -261,7 +267,7 @@
 
     // ===== 経験値・レベルアップ（停止対応） =====
     function addExp(v){ player.exp+=v; while(player.exp>=player.expNext){ player.exp-=player.expNext; player.level++; openLevelUp(); player.expNext=Math.floor(player.expNext*1.25 + 4); } ui.expBar.style.width=Math.floor(player.exp/player.expNext*100)+'%'; }
-    function openLevelUp(){ game.state='levelup'; SND.suspend(); show(ui.levelup); ui.cards.innerHTML=''; var cs=upgradeCards(3); cs.forEach(function(c){ var d=document.createElement('div'); d.className='card '+(c.rar.cls||''); d.innerHTML='<div class="name">'+c.u.name+'</div><div class="desc">'+c.u.desc+'</div>'; d.addEventListener('click',function(){ applyUpgrade(c); game.state='play'; hide(ui.levelup); SND.resume(); }); ui.cards.appendChild(d); }); }
+    function openLevelUp(){ game.state='levelup'; SND.suspend(); setMobileControlsEnabled(false); show(ui.levelup); ui.cards.innerHTML=''; var cs=upgradeCards(3); cs.forEach(function(c){ var d=document.createElement('div'); d.className='card '+(c.rar.cls||''); d.innerHTML='<div class="name">'+c.u.name+'</div><div class="desc">'+c.u.desc+'</div>'; d.addEventListener('click',function(){ applyUpgrade(c); game.state='play'; hide(ui.levelup); SND.resume(); setMobileControlsEnabled(true); }); ui.cards.appendChild(d); }); }
 
     // ===== 宝箱（停止対応） =====
     function openChest(opts){
@@ -273,22 +279,14 @@
         if(canEvo() && !evoGiven){ var d=document.createElement('div'); d.className='card rar-legend'; d.innerHTML='<div class="name">進化：アーケイン・ノヴァ</div><div class="desc">投石がAoEノヴァ化（威力/連射強化）</div>'; ui.chestCards.appendChild(d); doEvo(); evoGiven=true; }
         else { var card=upgradeCards(1)[0]; applyUpgrade(card); var div=document.createElement('div'); div.className='card '+(card.rar.cls||''); div.innerHTML='<div class="name">'+card.u.name+'</div><div class="desc">'+card.u.desc+'</div>'; ui.chestCards.appendChild(div); }
       }
-      if(!silent){ game.state='chest'; SND.suspend(); show(ui.chest); }
+      if(!silent){ game.state='chest'; SND.suspend(); setMobileControlsEnabled(false); show(ui.chest); }
     }
-    function closeChest(){ hide(ui.chest); game.state='play'; SND.resume(); }
+    function closeChest(){ hide(ui.chest); game.state='play'; SND.resume(); setMobileControlsEnabled(true); }
 
     // ===== 範囲攻撃（ゴリラ・スラム） =====
     function blastParams(){ var lv=player.blastLv||0; if(lv<=0) return {cd:Infinity,r:0,dmg:0}; var r=110+lv*18; var dmg=18+lv*6; var cd=Math.max(1.8, 6 - Math.min(4,(lv-1)*0.7)); return {r:r,dmg:dmg,cd:cd}; }
     var blastTimer=1.6;
-    function doBlast(){ var p=blastParams(); if(!isFinite(p.cd)) return; // ダメージ
-      var r2=p.r*p.r; for(var i=0;i<enemies.length;i++){ var e=enemies[i]; if(dist2(e.x,e.y,player.x,player.y) <= (e.r+p.r)*(e.r+p.r)){ e.hp -= p.dmg; // 軽いノックバック
-          var vx=e.x-player.x, vy=e.y-player.y, L=Math.hypot(vx,vy)||1; e.x+=vx/L*14; e.y+=vy/L*14; if(e.hp<=0){ game.kills++; dropFrom(e); enemies.splice(i,1); i--; }
-      } }
-      // 視覚効果
-      fx.push({x:player.x,y:player.y,r:22,dr:600,alpha:0.8,life:0.35,age:0});
-      fx.push({x:player.x,y:player.y,r:10,dr:380,alpha:0.5,life:0.28,age:0});
-      SND.blast();
-    }
+    function doBlast(){ var p=blastParams(); if(!isFinite(p.cd)) return; var r2=p.r*p.r; for(var i=0;i<enemies.length;i++){ var e=enemies[i]; if(dist2(e.x,e.y,player.x,player.y) <= (e.r+p.r)*(e.r+p.r)){ e.hp -= p.dmg; var vx=e.x-player.x, vy=e.y-player.y, L=Math.hypot(vx,vy)||1; e.x+=vx/L*14; e.y+=vy/L*14; if(e.hp<=0){ game.kills++; dropFrom(e); enemies.splice(i,1); i--; } } } fx.push({x:player.x,y:player.y,r:22,dr:600,alpha:0.8,life:0.35,age:0}); fx.push({x:player.x,y:player.y,r:10,dr:380,alpha:0.5,life:0.28,age:0}); SND.blast(); }
 
     // ===== ユーティリティ =====
     function dist2(ax,ay,bx,by){ var dx=ax-bx,dy=ay-by; return dx*dx+dy*dy; }
@@ -296,9 +294,9 @@
     function anglerp(a,b,t){ var d=((b-a+Math.PI*3)%(Math.PI*2))-Math.PI; return a + d*clamp(t,0,1); }
 
     // ===== スタート/ポーズ =====
-    function start(){ SND.unlock(); game.state='play'; hide(ui.menu); hide(ui.pause); hide(ui.over); hide(ui.levelup); hide(ui.chest); game.t=0; game.kills=0; player.x=0; player.y=0; player.hp=player.maxHp=8; player.armor=0; player.damage=12; player.cdMul=1; player.projSpeed=560; player.projCount=1; player.magnet=200; player.level=1; player.exp=0; player.expNext=12; player.boltLv=1; player.auraLv=0; player.orbitLv=0; player.evolved=false; player.iframes=0; enemies=[]; bullets=[]; gems=[]; items=[]; orbits=[]; chests=[]; fx=[]; spawnOrbitIfNeeded(); spawnWave('normal'); spawnCd=0; nextElite=90; nextBoss=180; blastTimer=1.6; }
-    function togglePause(){ if(game.state==='play'){ game.state='pause'; show(ui.pause); SND.suspend(); } else if(game.state==='pause'){ game.state='play'; hide(ui.pause); SND.resume(); } }
-    ui.startBtn.addEventListener('click',start); ui.resumeBtn.addEventListener('click',togglePause); ui.retryBtn.addEventListener('click',start); ui.toMenuBtn.addEventListener('click',function(){ game.state='menu'; show(ui.menu); hide(ui.over); SND.suspend(); }); ui.chestOkBtn.addEventListener('click',closeChest);
+    function start(){ SND.unlock(); game.state='play'; hide(ui.menu); hide(ui.pause); hide(ui.over); hide(ui.levelup); hide(ui.chest); game.t=0; game.kills=0; player.x=0; player.y=0; player.hp=player.maxHp=8; player.armor=0; player.damage=12; player.cdMul=1; player.projSpeed=560; player.projCount=1; player.magnet=200; player.level=1; player.exp=0; player.expNext=12; player.boltLv=1; player.auraLv=0; player.orbitLv=0; player.evolved=false; player.iframes=0; enemies=[]; bullets=[]; gems=[]; items=[]; orbits=[]; chests=[]; fx=[]; spawnOrbitIfNeeded(); spawnWave('normal'); spawnCd=0; nextElite=90; nextBoss=180; blastTimer=1.6; setMobileControlsEnabled(true); }
+    function togglePause(){ if(game.state==='play'){ game.state='pause'; show(ui.pause); SND.suspend(); setMobileControlsEnabled(false); } else if(game.state==='pause'){ game.state='play'; hide(ui.pause); SND.resume(); setMobileControlsEnabled(true); } }
+    ui.startBtn.addEventListener('click',start); ui.resumeBtn.addEventListener('click',togglePause); ui.retryBtn.addEventListener('click',start); ui.toMenuBtn.addEventListener('click',function(){ game.state='menu'; show(ui.menu); hide(ui.over); SND.suspend(); setMobileControlsEnabled(false); }); ui.chestOkBtn.addEventListener('click',closeChest);
 
     // ===== オービット武器 =====
     function spawnOrbitIfNeeded(){ var need=Math.max(0,(player.orbitLv||0)-orbits.length); for(var i=0;i<need;i++){ orbits.push({ang:Math.random()*Math.PI*2, r: 42 + orbits.length*12, sp: 1.8 + orbits.length*0.25, dmg: 8 + (player.orbitLv-1)*2}); } }
@@ -310,7 +308,7 @@
     // ===== ループ =====
     var fireCd=0; function loop(ts){ if(loop.last==null) loop.last=ts; var dt=Math.min(0.033,(ts-loop.last)/1000); loop.last=ts;
       drawBackground();
-      if(game.state==='menu'){ show(ui.menu); requestAnimationFrame(loop); return; }
+      if(game.state==='menu'){ show(ui.menu); setMobileControlsEnabled(false); requestAnimationFrame(loop); return; }
       if(game.state==='pause'||game.state==='levelup'||game.state==='over'||game.state==='chest'){ requestAnimationFrame(loop); return; }
 
       game.t += dt; cam.x=player.x; cam.y=player.y; player.iframes=Math.max(0, player.iframes-dt);
@@ -378,17 +376,13 @@
       for(var i=0;i<gems.length;i++){ var gm=gems[i]; drawSprite(SPR.gem, gm.x, gm.y, 0, 1, 0.9); }
       for(var i=0;i<items.length;i++){ var it2=items[i]; var icon = it2.type==='food'? SPR.food : SPR.vacuum; drawSprite(icon, it2.x, it2.y, 0, 1, 1); }
       for(var i=0;i<chests.length;i++){ var ch=chests[i]; drawSprite(SPR.chest, ch.x, ch.y, 0, 1, 1); }
-      // FX（スラムの衝撃波）
-      for(var i=0;i<fx.length;i++){
-        var f=fx[i]; f.age+=dt; f.r+=f.dr*dt; var a=1 - f.age/f.life; if(a<=0){ fx.splice(i,1); i--; continue; }
-        var p=worldToScreen(f.x,f.y); ctx.save(); ctx.globalAlpha = f.alpha * a; ctx.lineWidth = 6; ctx.strokeStyle = '#86efac'; ctx.beginPath(); ctx.arc(p.x,p.y,f.r,0,Math.PI*2); ctx.stroke(); ctx.restore();
-      }
+      for(var i=0;i<fx.length;i++){ var f=fx[i]; f.age+=dt; f.r+=f.dr*dt; var a=1 - f.age/f.life; if(a<=0){ fx.splice(i,1); i--; continue; } var p=worldToScreen(f.x,f.y); ctx.save(); ctx.globalAlpha = f.alpha * a; ctx.lineWidth = 6; ctx.strokeStyle = '#86efac'; ctx.beginPath(); ctx.arc(p.x,p.y,f.r,0,Math.PI*2); ctx.stroke(); ctx.restore(); }
       var palpha = (player.iframes>0 && ((game.t*10)|0)%2===0) ? 0.6 : 1; drawSprite(SPR.player, player.x, player.y, 0, palpha, 1);
 
       requestAnimationFrame(loop);
     }
 
-    function gameOver(){ game.state='over'; show(ui.over); ui.finalTime.textContent=toMMSS(game.t); ui.finalKills.textContent=String(game.kills); SND.suspend(); }
+    function gameOver(){ game.state='over'; show(ui.over); ui.finalTime.textContent=toMMSS(game.t); ui.finalKills.textContent=String(game.kills); SND.suspend(); setMobileControlsEnabled(false); }
     function toMMSS(t){ var m=Math.floor(t/60), s=Math.floor(t%60); return (m<10?'0':'')+m+':' + (s<10?'0':'')+s; }
 
     // 射撃（投石）
@@ -412,14 +406,14 @@
         spawnEnemy('monkey','normal'); console.assert(enemies[enemies.length-1].type==='monkey', '[TEST] spawn monkey'); enemies.pop();
         console.assert(player.expNext===12, '[TEST] expNext baseline');
         console.assert((player.blastLv||0)>=1, '[TEST] blast baseline level');
-        // 範囲攻撃の基本ダメージ検証（近くの弱い敵が倒れる）
+        // blast kills nearby weak
         var testE={x:player.x+30,y:player.y,r:10,hp:10,maxHp:10,type:'rhino',tier:'normal',speed:0}; enemies.push(testE); var before=enemies.length; doBlast(); console.assert(enemies.length===before-1, '[TEST] blast kills weak nearby');
-        console.log('[TEST] all basic checks passed');
+        console.log('[TEST] basic checks passed');
       }catch(e){ console.warn('[TEST] some tests failed', e); }
     })();
 
     // 起動
-    show(ui.menu); requestAnimationFrame(loop);
+    setMobileControlsEnabled(false); show(ui.menu); requestAnimationFrame(loop);
   })();
   </script>
 </body>
